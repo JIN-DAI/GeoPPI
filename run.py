@@ -259,6 +259,7 @@ def main():
         sorted_idx = np.load(idxfile)
     except:
         print('File reading error: Please redownload the file {} from the GitHub website again!'.format(idxfile))
+        sorted_idx = [i for i in range(1000)]
 
 
     os.system('cp {} ./'.format(pdbfile))
@@ -319,7 +320,6 @@ def main():
         model.load_state_dict(torch.load(gnnfile,map_location='cpu'))
     except:
         print('File reading error: Please redownload the file {} from the GitHub website again!'.format(gnnfile))
-        sorted_idx = [i for i in range(500)]
 
 
     model.to(device)
