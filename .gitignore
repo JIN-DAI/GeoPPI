@@ -1,2 +1,9 @@
 foldx
 rotabase.txt
+
+.history/
+temp/
+__pycache__/
+trainedmodels/gbt-s4169.pkl
+*/.DS_Store
+.DS_Store
