@@ -319,6 +319,7 @@ def main():
         model.load_state_dict(torch.load(gnnfile,map_location='cpu'))
     except:
         print('File reading error: Please redownload the file {} from the GitHub website again!'.format(gnnfile))
+        sorted_idx = [i for i in range(500)]
 
 
     model.to(device)
