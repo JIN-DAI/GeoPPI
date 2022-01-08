@@ -91,8 +91,8 @@ def GeoPPIpredict(A, E, A_m, E_m, model, forest, sorted_idx,flag):
 
     features = np.round(fea.cpu().view(1,-1).numpy(),3)
       
-    print("\nShape of feature: {:}".format(np.shape(features)))
-    print("Indices in features' dim[1] for prediction: {:}\n".format(sorted_idx[:240]))
+    #print("\nShape of feature: {:}".format(np.shape(features)))
+    #print("Indices in features' dim[1] for prediction: \n{:}\n".format(sorted_idx[:240]))
     
     ddg = forest.predict(features[:,sorted_idx[:240]])
     ddg = np.round(ddg[0],2)

@@ -259,7 +259,7 @@ def main():
         sorted_idx = np.load(idxfile)
     except:
         print('File reading error: Please redownload the file {} from the GitHub website again!'.format(idxfile))
-        sorted_idx = [i for i in range(1000)]
+        #sorted_idx = [i for i in range(1000)]  # meanless, just for testing the follows
 
 
     os.system('cp {} ./'.format(pdbfile))
@@ -272,7 +272,7 @@ def main():
         os.system('rm -r {}'.format(workdir))
     os.system('mkdir {}'.format(workdir))
 
-    # generate the interface residues
+    # generate the `interface residues
     os.system('python gen_interface.py {} {} {} > {}/pymol.log'.format(pdbfile, if_info,workdir,workdir))
     interfacefile = '{}/interface.txt'.format(workdir)
 
