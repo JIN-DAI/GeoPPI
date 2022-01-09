@@ -352,6 +352,114 @@ def main():
     os.system('rm ./{}'.format(pdbfile))
     os.system('rm ./individual_list.txt')
 
+
+# ----------------------------------------------------------------
+def predict_ddg(pdbfile, mutationinfo, if_info):
+    gnnfile = 'trainedmodels/GeoEnc.tor'
+    gbtfile = 'trainedmodels/gbt-s4169.pkl'
+    idxfile = 'trainedmodels/sortidx.npy'
+
+
+    try:
+        sorted_idx = np.load(idxfile)
+    except:
+        print('File reading error: Please redownload the file {} from the GitHub website again!'.format(idxfile))
+        #sorted_idx = [i for i in range(1000)]  # meanless, just for testing the follows
+
+
+    os.system('cp {} ./'.format(pdbfile))
+    pdbfile = pdbfile.split('/')[-1]
+    pdb = pdbfile.split('.')[0]
+    workdir = 'temp'
+    cutoff = 3
+
+    if path.exists('./{}'.format(workdir)):
+        os.system('rm -r {}'.format(workdir))
+    os.system('mkdir {}'.format(workdir))
+
+    # generate the `interface residues
+    os.system('python gen_interface.py {} {} {} > {}/pymol.log'.format(pdbfile, if_info,workdir,workdir))
+    interfacefile = '{}/interface.txt'.format(workdir)
+
+    # Extract mutation information
+    graph_mutinfo = []
+    flag = False
+    info = mutationinfo
+    wildname = info[0]
+    chainid = info[1] 
+    resid = info[2:-1]
+    mutname = info[-1]
+    if wildname==mutname:flag= True
+    graph_mutinfo.append('{}_{}'.format(chainid,resid))
+
+    # build a pdb file that is mutated to it self
+    with open('individual_list.txt','w') as f:
+        cont = '{}{}{}{};'.format(wildname,chainid,resid,wildname)
+        f.write(cont)
+    comm = './foldx --command=BuildModel --pdb={}  --mutant-file={}  --output-dir={} --pdb-dir={} >{}/foldx.log'.format(\
+                                pdbfile,  'individual_list.txt', workdir, './',workdir)
+    os.system(comm)
+    os.system('mv {}/{}_1.pdb   {}/wildtype.pdb '.format(workdir, pdb, workdir))
+
+    # build the mutant file
+    with open('individual_list.txt','w') as f:
+        cont = '{}{}{}{};'.format(wildname,chainid,resid,mutname)
+        f.write(cont)
+    comm = './foldx --command=BuildModel --pdb={}  --mutant-file={}  --output-dir={} --pdb-dir={} >{}/foldx.log'.format(\
+                                pdbfile,  'individual_list.txt', workdir, './',workdir)
+    os.system(comm)
+
+    wildtypefile = '{}/wildtype.pdb'.format(workdir, pdb)
+    mutantfile = '{}/{}_1.pdb'.format(workdir, pdb)
+
+    try:
+        A, E, _ =gen_graph_data(wildtypefile, graph_mutinfo, interfacefile , cutoff, if_info)
+        A_m, E_m, _=gen_graph_data(mutantfile, graph_mutinfo, interfacefile , cutoff, if_info)
+    except:
+        print('Data processing error: Please double check your inputs is correct! Such as the pdb file path, mutation information and binding partners. You might find more error details at {}/foldx.log'.format(workdir))
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    model = GeometricEncoder(256)
+    try:
+        model.load_state_dict(torch.load(gnnfile,map_location='cpu'))
+    except:
+        print('File reading error: Please redownload the file {} from the GitHub website again!'.format(gnnfile))
+
+
+    model.to(device)
+    model.eval()
+    A = A.to(device)
+    E = E.to(device)
+    A_m = A_m.to(device)
+    E_m = E_m.to(device)
+
+    try:
+        with open(gbtfile, 'rb') as pickle_file:
+            forest = pickle.load(pickle_file)
+    except:
+        print('File reading error: Please redownload the file {} via the following command: \
+                wget https://media.githubusercontent.com/media/Liuxg16/largefiles/8167d5c365c92d08a81dffceff364f72d765805c/gbt-s4169.pkl -P trainedmodels/'.format(gbtfile))
+
+    ddg = GeoPPIpredict(A,E,A_m,E_m, model, forest, sorted_idx,flag)
+ 
+    print('='*40+'Results'+'='*40)
+    if ddg<0:
+        mutationeffects = 'destabilizing'
+        print('The predicted binding affinity change (wildtype-mutant) is {} kcal/mol ({} mutation).'.format(ddg,mutationeffects))
+    elif ddg>0:
+        mutationeffects = 'stabilizing'
+        print('The predicted binding affinity change (wildtype-mutant) is {} kcal/mol ({} mutation).'.format(ddg,mutationeffects))
+    else:
+        print('The predicted binding affinity change (wildtype-mutant) is 0.0 kcal/mol.')
+
+
+    os.system('rm ./{}'.format(pdbfile))
+    os.system('rm ./individual_list.txt')
+    
+    return ddg
+
+
 if __name__ == "__main__":
     main()
  
