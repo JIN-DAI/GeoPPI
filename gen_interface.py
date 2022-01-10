@@ -29,10 +29,14 @@ for i in range(len(chainsAB)):
 			inter='{}_{}_{}_{}'.format(cha,chb,chainn,resid)
 			if inter not in interfaces:
 				interfaces.append(inter)
+		ffile.close()
 		os.system('rm temp/temp.txt')
+
 ffile = open('{}/interface.txt'.format(workdir),'w')
 for x in interfaces:
 	ffile.write(x+'\n')
+ffile.close()
+
 cmd.save(pdbobject)
 cmd.delete('all')
 
