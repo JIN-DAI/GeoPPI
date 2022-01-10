@@ -9,12 +9,16 @@ from sklearn.ensemble import GradientBoostingRegressor,RandomForestRegressor
 
 def gen_graph_data(pdbfile, mutinfo, interfile,  cutoff, if_info=None):
     max_dis = 12
-    pdbfile = open(pdbfile)
-    lines = pdbfile.read().splitlines()
+    # load pdb file
+    with open(pdbfile) as pdbfile:
+        lines = pdbfile.read().splitlines()
+    # residues on interface
     chainid = [x.split('_')[0] for x in mutinfo]
-    interface_res = read_inter_result(interfile,if_info, chainid)
-    if len(interface_res)==0: print('Warning: We do not find any interface residues between the two parts: {}. Please double check your inputs. Thank you!'.format(if_info))
-    sample = build_graph(lines, interface_res,mutinfo, cutoff,max_dis)
+    interface_res = read_inter_result(interfile, if_info, chainid)
+    if len(interface_res)==0:
+        print('Warning: We do not find any interface residues between the two parts: {}. Please double check your inputs. Thank you!'.format(if_info))
+    # build graph
+    sample = build_graph(lines, interface_res, mutinfo, cutoff, max_dis)
     return sample
 
 def read_inter_result(path, if_info=None, chainid=None, old2new=None):
@@ -34,7 +38,6 @@ def read_inter_result(path, if_info=None, chainid=None, old2new=None):
                 else:
                     mappings[b] += [a]
 
-
         target_chains = []
         for chainidx in chainid:
             if chainidx in mappings:
@@ -49,8 +52,8 @@ def read_inter_result(path, if_info=None, chainid=None, old2new=None):
     else:
         target_inters = None
 
-    inter = open(path)
-    interlines = inter.read().splitlines()
+    with open(path) as inter:
+        interlines = inter.read().splitlines()
     interface_res = []
     for line in interlines:
         iden = line[:3]
@@ -60,7 +63,7 @@ def read_inter_result(path, if_info=None, chainid=None, old2new=None):
         else:
             if iden not in target_inters:
                 continue
-        infor = line[4:].strip().split('_')#  chainid, resid
+        infor = line[4:].strip().split('_')  # chainid, resid
         assert len(infor)==2
         interface_res.append('_'.join(infor))
 
@@ -279,12 +282,13 @@ def main():
     # Extract mutation information
     graph_mutinfo = []
     flag = False
+    # single-point mutation
     info = mutationinfo
     wildname = info[0]
     chainid = info[1] 
     resid = info[2:-1]
     mutname = info[-1]
-    if wildname==mutname:flag= True
+    if wildname==mutname:flag = True
     graph_mutinfo.append('{}_{}'.format(chainid,resid))
 
     # build a pdb file that is mutated to it self
@@ -308,8 +312,8 @@ def main():
     mutantfile = '{}/{}_1.pdb'.format(workdir, pdb)
 
     try:
-        A, E, _ =gen_graph_data(wildtypefile, graph_mutinfo, interfacefile , cutoff, if_info)
-        A_m, E_m, _=gen_graph_data(mutantfile, graph_mutinfo, interfacefile , cutoff, if_info)
+        A, E, _ = gen_graph_data(wildtypefile, graph_mutinfo, interfacefile , cutoff, if_info)
+        A_m, E_m, _= gen_graph_data(mutantfile, graph_mutinfo, interfacefile , cutoff, if_info)
     except:
         print('Data processing error: Please double check your inputs is correct! Such as the pdb file path, mutation information and binding partners. You might find more error details at {}/foldx.log'.format(workdir))
 
@@ -336,7 +340,7 @@ def main():
         print('File reading error: Please redownload the file {} via the following command: \
                 wget https://media.githubusercontent.com/media/Liuxg16/largefiles/8167d5c365c92d08a81dffceff364f72d765805c/gbt-s4169.pkl -P trainedmodels/'.format(gbtfile))
 
-    ddg = GeoPPIpredict(A,E,A_m,E_m, model, forest, sorted_idx,flag)
+    ddg = GeoPPIpredict(A,E,A_m,E_m, model, forest, sorted_idx, flag)
  
     print('='*40+'Results'+'='*40)
     if ddg<0:
@@ -371,50 +375,83 @@ def predict_ddg(pdbfile, mutationinfo, if_info):
     pdbfile = pdbfile.split('/')[-1]
     pdb = pdbfile.split('.')[0]
     workdir = 'temp'
-    cutoff = 3
+    cutoff = 3  # ?
 
     if path.exists('./{}'.format(workdir)):
         os.system('rm -r {}'.format(workdir))
     os.system('mkdir {}'.format(workdir))
 
-    # generate the `interface residues
+    # --- interfacefile ---
+    # generate the interface residues
     os.system('python gen_interface.py {} {} {} > {}/pymol.log'.format(pdbfile, if_info,workdir,workdir))
     interfacefile = '{}/interface.txt'.format(workdir)
 
-    # Extract mutation information
-    graph_mutinfo = []
-    flag = False
+    # --- wildtypefile & mutantfile & graph_mutinfo ---
+    # Extract mutation information  
+    '''
+    # single-point mutation
     info = mutationinfo
     wildname = info[0]
     chainid = info[1] 
     resid = info[2:-1]
     mutname = info[-1]
-    if wildname==mutname:flag= True
-    graph_mutinfo.append('{}_{}'.format(chainid,resid))
+    '''
+    # multiple-point mutation
+    wildname = []
+    chainid = []
+    resid = []
+    mutname = []
+    for info in mutationinfo.split(","):
+        wildname.append(info[0])
+        chainid.append(info[1])
+        resid.append(info[2:-1])
+        mutname.append(info[-1])
+    #
+    graph_mutinfo = []
+    for i in range(len(chainid)):
+        graph_mutinfo.append('{}_{}'.format(chainid[i], resid[i]))
+    # flag to specify unmutated case
+    flag = False
+    if wildname==mutname: flag = True
 
     # build a pdb file that is mutated to it self
     with open('individual_list.txt','w') as f:
-        cont = '{}{}{}{};'.format(wildname,chainid,resid,wildname)
+        cont = ''
+        separator = list(','*(len(wildname)-1)+';')
+        for i in range(len(wildname)):
+            cont += '{}{}{}{}{}'.format(wildname[i],
+                                        chainid[i],
+                                        resid[i],
+                                        wildname[i],  # itself
+                                        separator[i])
         f.write(cont)
-    comm = './foldx --command=BuildModel --pdb={}  --mutant-file={}  --output-dir={} --pdb-dir={} >{}/foldx.log'.format(\
+    comm = './foldx --command=BuildModel --pdb={} --mutant-file={} --output-dir={} --pdb-dir={} > {}/foldx.log'.format(\
                                 pdbfile,  'individual_list.txt', workdir, './',workdir)
     os.system(comm)
     os.system('mv {}/{}_1.pdb   {}/wildtype.pdb '.format(workdir, pdb, workdir))
 
     # build the mutant file
     with open('individual_list.txt','w') as f:
-        cont = '{}{}{}{};'.format(wildname,chainid,resid,mutname)
+        cont = ''
+        separator = list(','*(len(wildname)-1)+';')
+        for i in range(len(wildname)):
+            cont += '{}{}{}{}{}'.format(wildname[i],
+                                        chainid[i],
+                                        resid[i],
+                                        mutname[i],  # mutant
+                                        separator[i])
         f.write(cont)
-    comm = './foldx --command=BuildModel --pdb={}  --mutant-file={}  --output-dir={} --pdb-dir={} >{}/foldx.log'.format(\
-                                pdbfile,  'individual_list.txt', workdir, './',workdir)
+    comm = './foldx --command=BuildModel --pdb={} --mutant-file={} --output-dir={} --pdb-dir={} > {}/foldx.log'.format(\
+                                pdbfile, 'individual_list.txt', workdir, './',workdir)
     os.system(comm)
 
     wildtypefile = '{}/wildtype.pdb'.format(workdir, pdb)
     mutantfile = '{}/{}_1.pdb'.format(workdir, pdb)
-
+    
+    # --- gen_graph_data ---
     try:
-        A, E, _ =gen_graph_data(wildtypefile, graph_mutinfo, interfacefile , cutoff, if_info)
-        A_m, E_m, _=gen_graph_data(mutantfile, graph_mutinfo, interfacefile , cutoff, if_info)
+        A, E, _ = gen_graph_data(wildtypefile, graph_mutinfo, interfacefile , cutoff, if_info)
+        A_m, E_m, _ = gen_graph_data(mutantfile, graph_mutinfo, interfacefile , cutoff, if_info)
     except:
         print('Data processing error: Please double check your inputs is correct! Such as the pdb file path, mutation information and binding partners. You might find more error details at {}/foldx.log'.format(workdir))
 
@@ -422,18 +459,17 @@ def predict_ddg(pdbfile, mutationinfo, if_info):
 
     model = GeometricEncoder(256)
     try:
-        model.load_state_dict(torch.load(gnnfile,map_location='cpu'))
+        model.load_state_dict(torch.load(gnnfile, map_location='cpu'))
     except:
         print('File reading error: Please redownload the file {} from the GitHub website again!'.format(gnnfile))
-
-
+        
     model.to(device)
     model.eval()
     A = A.to(device)
     E = E.to(device)
     A_m = A_m.to(device)
     E_m = E_m.to(device)
-
+    
     try:
         with open(gbtfile, 'rb') as pickle_file:
             forest = pickle.load(pickle_file)
@@ -442,7 +478,7 @@ def predict_ddg(pdbfile, mutationinfo, if_info):
                 wget https://media.githubusercontent.com/media/Liuxg16/largefiles/8167d5c365c92d08a81dffceff364f72d765805c/gbt-s4169.pkl -P trainedmodels/'.format(gbtfile))
 
     ddg = GeoPPIpredict(A,E,A_m,E_m, model, forest, sorted_idx,flag)
- 
+
     print('='*40+'Results'+'='*40)
     if ddg<0:
         mutationeffects = 'destabilizing'
@@ -462,4 +498,4 @@ def predict_ddg(pdbfile, mutationinfo, if_info):
 
 if __name__ == "__main__":
     main()
- 
+
