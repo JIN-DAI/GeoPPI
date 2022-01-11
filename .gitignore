@@ -7,3 +7,6 @@ __pycache__/
 trainedmodels/gbt-s4169.pkl
 */.DS_Store
 .DS_Store
+.ipynb_checkpoints/
+data_GA/
+
