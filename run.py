@@ -21,6 +21,7 @@ def gen_graph_data(pdbfile, mutinfo, interfile,  cutoff, if_info=None):
     sample = build_graph(lines, interface_res, mutinfo, cutoff, max_dis)
     return sample
 
+# parse temp/interface.txt to interface_res
 def read_inter_result(path, if_info=None, chainid=None, old2new=None):
     if if_info is not None:
         info1 = if_info.split('_')
@@ -51,9 +52,11 @@ def read_inter_result(path, if_info=None, chainid=None, old2new=None):
         target_inters =list(set(target_inters))
     else:
         target_inters = None
-
+    
+    # load temp/interface.txt
     with open(path) as inter:
         interlines = inter.read().splitlines()
+    # save to interface_res
     interface_res = []
     for line in interlines:
         iden = line[:3]
@@ -86,7 +89,7 @@ def build_graph(lines, interface_res, mutinfo, cutoff=3, max_dis=12, noisedict =
     V_atom = len(atomnames)
     V_res = len(residues)
 
-    # build chain2id
+    # Loop 1: loop over pdb file to prepare variables inter_coors_matrix and chain2id
     chain2id = []
     interface_coordinates = []
     line_list= []
@@ -101,11 +104,10 @@ def build_graph(lines, interface_res, mutinfo, cutoff=3, max_dis=12, noisedict =
             x = float(line[30:38].strip())
             y = float(line[38:46].strip())
             z = float(line[46:54].strip())
+            
             if elemname not in atomdict:
                 continue
-
-            coords = torch.tensor([x,y,z])
-            atomid = atomdict[elemname]
+            
             if resname not in resdict:
                 resname = resname[1:]
             if resname not in resdict:
@@ -113,33 +115,41 @@ def build_graph(lines, interface_res, mutinfo, cutoff=3, max_dis=12, noisedict =
 
             if chainid not in chain2id:
                 chain2id.append(chainid)
- 
-            line_token = '{}_{}_{}_{}'.format(atomname,resname,chainid, res_idx)
+
+            line_token = '{}_{}_{}_{}'.format(atomname,resname,chainid,res_idx)
             if line_token not in line_list:
                 line_list.append(line_token)
             else:
                 continue
 
-            resid  = resdict[resname]
+            atomid = atomdict[elemname]  # atom name to index
+            resid  = resdict[resname]  # residue name to index
+            
             cr_token = '{}_{}'.format(chainid, res_idx)
+            
+            coords = torch.tensor([x,y,z])
             float_cd  = [float(x) for x in coords]
             cd_tensor = torch.tensor(float_cd)
+            
+            ## if cr_token is both in interface_res and mutinfo, 
+            ## then append to interface_coordinates twice?
             if cr_token in interface_res:
                 interface_coordinates.append(cd_tensor)
             if mutinfo is not None and cr_token in mutinfo:
                 interface_coordinates.append(cd_tensor)
-                interface_res.append(cr_token)
-                mutant_coords.append(cd_tensor)
+                interface_res.append(cr_token)  # expanded with mutinfo
+                mutant_coords.append(cd_tensor)  # not used?
 
     inter_coors_matrix = torch.stack(interface_coordinates)
     chain2id = {x:i for i,x in enumerate(chain2id)}
-    global_resid2noise = {}
 
+    # Loop 2: loop over pdb file to get features
     n_features = V_atom+V_res+1+1+3 +1 +1+1+1
-    line_list= []
+    line_list = []
     atoms = []
     flag_mut = False
     res_index_set = {}
+    global_resid2noise = {}
     for line in lines:
         if line[0:4] == 'ATOM':
             features = [0]*n_features
@@ -151,68 +161,80 @@ def build_graph(lines, interface_res, mutinfo, cutoff=3, max_dis=12, noisedict =
             x = float(line[30:38].strip())
             y = float(line[38:46].strip())
             z = float(line[46:54].strip())
+            
             if elemname not in atomdict:
                 continue
 
-            coords = torch.tensor([x,y,z])
-            atomid = atomdict[elemname]
             if resname not in resdict:
                 resname = resname[1:]
             if resname not in resdict:
                 continue
-            line_token = '{}_{}_{}_{}'.format(atomname,resname,chainid, res_idx)
+            
+            line_token = '{}_{}_{}_{}'.format(atomname,resname,chainid,res_idx)
             if line_token not in line_list:
                 line_list.append(line_token)
             else:
                 continue
 
+            atomid = atomdict[elemname]
             resid  = resdict[resname]
-            features[atomid] = 1
-            features[V_atom+resid] = 1
-
             cr_token = '{}_{}'.format(chainid, res_idx)
+            
+            coords = torch.tensor([x,y,z])
             float_cd  = [float(x) for x in coords]
             cd_tensor = torch.tensor(float_cd)
-            #24
+            
+            # --- A: features of nodes ---
+            # 0,1,2,3 : one-hot vector for elemname in atomnames
+            features[atomid] = 1
+            
+            # 4,5,...,22,23 : one-hot vector for resname in residues
+            features[V_atom+resid] = 1
+            
+            # 24 : whether residue on interface
             if cr_token in interface_res:
                 features[V_atom+V_res] = 1
             
+            # 25 : whether chain contains mutated residues
             if mutinfo is not None:
                 for inforrr in mutinfo:
                     mut_chainid = inforrr.split('_')[0]
                     if chainid==mut_chainid:
-                        #25
                         features[V_atom+V_res+1] = 1
-            #26
+            
+            # 26 : index of chain
             features[V_atom+V_res+2] = chain2id[chainid]
-
-            #27
+            
+            # 27 : index of chainid_res_idx from 1 to ... 
+            # related to positional encoding ?
             if cr_token not in res_index_set:
                 res_index_set[cr_token] = len(res_index_set)+1
-
             features[V_atom+V_res+3] = res_index_set[cr_token]
 
-            #28
+            # 28 : whether CA atom
+            # noisedict???
             if atomname=='CA':
                 features[V_atom+V_res+4] = res_index_set[cr_token]
                 if noisedict is not None and cr_token in noisedict:
                     global_resid2noise[res_index_set[cr_token]] = noisedict[cr_token]
 
             flag = False
-            dissss = torch.norm(cd_tensor-inter_coors_matrix,dim=1)
-            flag = (dissss<max_dis).any()
+            # cd_tensor: 1x3; inter_coors_matrix: Nx3; 
+            # minus:expand cd_tensor along row then substract with inter_coors_matrix 
+            dissss = torch.norm(cd_tensor-inter_coors_matrix,dim=1)  # 2-norm
+            flag = (dissss<max_dis).any()  # flag to identify atoms contact with the others
 
-
-            #29-31
+            # 29-31 : coordinates x, y, z
             features[V_atom+V_res+5:V_atom+V_res+8] = float_cd
 
             res_iden_token = '{}_{}_{}'.format(chainid, res_idx, resname).upper()
             if  mutinfo is not None and cr_token in mutinfo:
-                #32
+                # 32: whether residue is mutated. Similar to 25
                 features[V_atom+V_res+8]=1
                 flag_mut = True
                 flag = True
             
+            # only consider atoms contacting with others or on mutation sites
             if flag:
                 atoms.append(features)
 
@@ -221,32 +243,45 @@ def build_graph(lines, interface_res, mutinfo, cutoff=3, max_dis=12, noisedict =
     
     if len(atoms)<5:
         return None
+    
+    # --- edges ---
     atoms = torch.tensor(atoms, dtype=torch.float)
     N = atoms.size(0)
     atoms_type = torch.argmax(atoms[:,:4],1)
     atoms_type = atoms_type.unsqueeze(1).repeat(1,N)
-    edge_type = atoms_type*4+atoms_type.t()
+    # row*4[0,4,8,12] + column[0,1,2,3]: 
+    # totally 4x4=16 combination to represent the combination of atom types
+    edge_type = atoms_type*4+atoms_type.t()  
 
-    pos  = atoms[:,-4:-1] #N,3
-    row = pos[:,None,:].repeat(1,N,1)
-    col = pos[None,:,:].repeat(N,1,1)
-    direction = row-col
+    pos = atoms[:,-4:-1]  # coordinates [x, y, z], shape Nx3
+    row = pos[:,None,:].repeat(1,N,1)  # shape NxNx3, dim 1 is repeated
+    col = pos[None,:,:].repeat(N,1,1)  # shape NxNx3, dim 0 is repeated
+    direction = row-col  # [x_i-x_j, y_i-y_j, z_i-z_j]_{ij}
     del row, col
-    distance = torch.sqrt(torch.sum(direction**2,2))+1e-10
-    distance1 = (1.0/distance)*(distance<float(cutoff)).float()
+    # distance and its inverse
+    distance = torch.sqrt(torch.sum(direction**2,2))+1e-10  # [r_i - r_j]_{ij}
+    distance1 = (1.0/distance)*(distance<float(cutoff)).float()  # 1/r_{ij}
     del distance
+    # set diagonal values to 1
     diag = torch.diag(torch.ones(N))
     dist = diag+ (1-diag)*distance1
-    del distance1, diag
-    flag = (dist>0).float()
-    direction = direction*flag.unsqueeze(2)
+    del distance1, diag    
+    # adjacency matrix of interface atoms' graph
+    # value: 0 or 1;
+    # shape: NxN
+    flag = (dist>0).float() # r_{ij} with distance less than cutoff -> 1
+    direction = direction*flag.unsqueeze(2)  # not used??
     del direction, dist
-    edge_sparse = torch.nonzero(flag) #K,2
-    edge_attr_sp = edge_type[edge_sparse[:,0],edge_sparse[:,1]] #K,4
+    # [row, column] indices of nonzero element in flag
+    # shape: (number of nonzero elements in flag)x2
+    edge_sparse = torch.nonzero(flag)
+    # value 0-15 to represent contacts of different types of atoms
+    # shape: (number of nonzero elements in flag),
+    edge_attr_sp = edge_type[edge_sparse[:,0],edge_sparse[:,1]]
     if noisedict is None:
-        savefilecont = [ atoms, edge_sparse, edge_attr_sp]
+        savefilecont = [atoms, edge_sparse, edge_attr_sp]
     else:
-        savefilecont = [ atoms, edge_sparse, edge_attr_sp, global_resid2noise]
+        savefilecont = [atoms, edge_sparse, edge_attr_sp, global_resid2noise]
     return savefilecont
 
 def main():
@@ -477,7 +512,7 @@ def predict_ddg(pdbfile, mutationinfo, if_info):
         print('File reading error: Please redownload the file {} via the following command: \
                 wget https://media.githubusercontent.com/media/Liuxg16/largefiles/8167d5c365c92d08a81dffceff364f72d765805c/gbt-s4169.pkl -P trainedmodels/'.format(gbtfile))
 
-    ddg = GeoPPIpredict(A,E,A_m,E_m, model, forest, sorted_idx,flag)
+    ddg = GeoPPIpredict(A, E, A_m, E_m, model, forest, sorted_idx, flag)
 
     print('='*40+'Results'+'='*40)
     if ddg<0:
