@@ -5,6 +5,7 @@ import os.path as path
 import torch, pickle
 from models import *
 from sklearn.ensemble import GradientBoostingRegressor,RandomForestRegressor
+from pymol import cmd  # to run predict_ddg() in jupyter notebook
 
 
 def gen_graph_data(pdbfile, mutinfo, interfile,  cutoff, if_info=None):
