@@ -515,16 +515,16 @@ def predict_ddg(pdbfile, mutationinfo, if_info):
 
     ddg = GeoPPIpredict(A, E, A_m, E_m, model, forest, sorted_idx, flag)
 
-    print('='*40+'Results'+'='*40)
+    #print('='*40+'Results'+'='*40)
     if ddg<0:
         mutationeffects = 'destabilizing'
-        print('The predicted binding affinity change (wildtype-mutant) is {} kcal/mol ({} mutation).'.format(ddg,mutationeffects))
+        #print('The predicted binding affinity change (wildtype-mutant) is {} kcal/mol ({} mutation).'.format(ddg,mutationeffects))
     elif ddg>0:
         mutationeffects = 'stabilizing'
-        print('The predicted binding affinity change (wildtype-mutant) is {} kcal/mol ({} mutation).'.format(ddg,mutationeffects))
+        #print('The predicted binding affinity change (wildtype-mutant) is {} kcal/mol ({} mutation).'.format(ddg,mutationeffects))
     else:
-        print('The predicted binding affinity change (wildtype-mutant) is 0.0 kcal/mol.')
-
+        #print('The predicted binding affinity change (wildtype-mutant) is 0.0 kcal/mol.')
+        None
 
     os.system('rm ./{}'.format(pdbfile))
     os.system('rm ./individual_list.txt')
