@@ -38,7 +38,7 @@ class GeometricEncoder(torch.nn.Module):
         x = torch.cat([x_init[:,:27],sinx, cosx,x_init[:,28:]],1)
         edge_index,edge_attr = E.t(), Ea.view(-1)
 
-        x = F.elu(self.conv1(x,   edge_index,edge_attr) + self.lin1(x))
+        x = F.elu(self.conv1(x, edge_index, edge_attr) + self.lin1(x))
         x = F.elu(self.conv2(x, edge_index) + self.lin2(x))
         x3 = F.elu(self.conv3(x, edge_index) + self.lin3(x))
         x4 = F.elu(self.conv4(x3, edge_index) + self.lin4(x3)) # K, d
@@ -90,18 +90,19 @@ def GeoPPIpredict(A, E, A_m, E_m, model, forest, sorted_idx,flag):
         fea = model.gen_features(A, E, E, A_m, E_m, E_m)
 
     features = np.round(fea.cpu().view(1,-1).numpy(),3)
-      
+    
     #print("\nShape of feature: {:}".format(np.shape(features)))
     #print("Indices in features' dim[1] for prediction: \n{:}\n".format(sorted_idx[:240]))
     
     ddg = forest.predict(features[:,sorted_idx[:240]])
     ddg = np.round(ddg[0],2)
     if ddg>8.0:
-        ddg =8.0
+        ddg = 8.0
     elif ddg<-8.0:
         ddg = -8.0
     # Note that our model is able to predict a small value to the case of "no mutaiton" (e.g., TI17T). To further calibrate the prediction, we set the output of this case to zero.
-    if flag: ddg=0.0
+    if flag: 
+        ddg=0.0
  
     return ddg
 
