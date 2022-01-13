@@ -1,7 +1,8 @@
 from pymol import cmd, stored
 
 
-def interfaceResidues(cmpx, cA='c. A', cB='c. B', cutoff=1.0, selName="interface"):
+def interfaceResidues(cmpx, cA='c. A', cB='c. B', cutoff=1.0, selName="interface",
+                      outputPath='temp'):
 	"""
 	interfaceResidues -- finds 'interface' residues between two chains in a complex.
 	
@@ -114,10 +115,11 @@ def interfaceResidues(cmpx, cA='c. A', cB='c. B', cutoff=1.0, selName="interface
 	
 	# reset users settings
 	cmd.set("dot_solvent", oldDS)
-	txtfile = 'temp/temp.txt'.format(cmpx)
+	txtfile = '{}/temp.txt'.format(outputPath)
 	ffile = open(txtfile,'w')
 	for x in ans:
 		ffile.write(x+'\n')
+	ffile.close()
 	return rVal,ans
 
 cmd.extend("interfaceResidues", interfaceResidues)
