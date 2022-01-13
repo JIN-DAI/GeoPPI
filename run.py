@@ -6,9 +6,11 @@ import torch, pickle
 from models import *
 from sklearn.ensemble import GradientBoostingRegressor,RandomForestRegressor
 from pymol import cmd  # to run predict_ddg() in jupyter notebook
+import shutil
+from gen_interface_func import gen_interface_func
 
 
-def gen_graph_data(pdbfile, mutinfo, interfile,  cutoff, if_info=None):
+def gen_graph_data(pdbfile, mutinfo, interfile, cutoff, if_info=None):
     max_dis = 12
     # load pdb file
     with open(pdbfile) as pdbfile:
@@ -54,7 +56,7 @@ def read_inter_result(path, if_info=None, chainid=None, old2new=None):
     else:
         target_inters = None
     
-    # load temp/interface.txt
+    # load {workdir}/interface.txt
     with open(path) as inter:
         interlines = inter.read().splitlines()
     # save to interface_res
@@ -312,7 +314,7 @@ def main():
     os.system('mkdir {}'.format(workdir))
 
     # generate the `interface residues
-    os.system('python gen_interface.py {} {} {} > {}/pymol.log'.format(pdbfile, if_info,workdir,workdir))
+    os.system('python gen_interface.py {} {} {} > {}/pymol.log'.format(pdbfile,if_info,workdir,workdir))
     interfacefile = '{}/interface.txt'.format(workdir)
 
     # Extract mutation information
@@ -394,7 +396,7 @@ def main():
 
 
 # ----------------------------------------------------------------
-def predict_ddg(pdbfile, mutationinfo, if_info):
+def predict_ddg(pdbfile, mutationinfo, if_info, workdir_suffix=""):
     gnnfile = 'trainedmodels/GeoEnc.tor'
     gbtfile = 'trainedmodels/gbt-s4169.pkl'
     idxfile = 'trainedmodels/sortidx.npy'
@@ -407,19 +409,20 @@ def predict_ddg(pdbfile, mutationinfo, if_info):
         #sorted_idx = [i for i in range(1000)]  # meanless, just for testing the follows
 
 
-    os.system('cp {} ./'.format(pdbfile))
-    pdbfile = pdbfile.split('/')[-1]
-    pdb = pdbfile.split('.')[0]
-    workdir = 'temp'
+    pdb = pdbfile.split('/')[-1]
+    pdb = pdb.split('.')[0]
+    workdir = 'temp'+workdir_suffix
     cutoff = 3  # ?
 
     if path.exists('./{}'.format(workdir)):
-        os.system('rm -r {}'.format(workdir))
-    os.system('mkdir {}'.format(workdir))
+        shutil.rmtree(workdir)  #os.system('rm -r {}'.format(workdir))
+    os.mkdir(workdir)  #os.system('mkdir {}'.format(workdir))
+    pdbfile = shutil.copy(pdbfile, workdir)  #os.system('cp {} ./'.format(pdbfile))
 
     # --- interfacefile ---
     # generate the interface residues
-    os.system('python gen_interface.py {} {} {} > {}/pymol.log'.format(pdbfile, if_info,workdir,workdir))
+    #os.system('python gen_interface.py {} {} {} > {}/pymol.log'.format(pdbfile, if_info,workdir,workdir))
+    gen_interface_func(pdbfile, if_info, workdir)
     interfacefile = '{}/interface.txt'.format(workdir)
 
     # --- wildtypefile & mutantfile & graph_mutinfo ---
@@ -451,7 +454,7 @@ def predict_ddg(pdbfile, mutationinfo, if_info):
     if wildname==mutname: flag = True
 
     # build a pdb file that is mutated to it self
-    with open('individual_list.txt','w') as f:
+    with open('{}/individual_list.txt'.format(workdir),'w') as f:
         cont = ''
         separator = list(','*(len(wildname)-1)+';')
         for i in range(len(wildname)):
@@ -462,12 +465,12 @@ def predict_ddg(pdbfile, mutationinfo, if_info):
                                         separator[i])
         f.write(cont)
     comm = './foldx --command=BuildModel --pdb={} --mutant-file={} --output-dir={} --pdb-dir={} > {}/foldx.log'.format(\
-                                pdbfile,  'individual_list.txt', workdir, './',workdir)
+                                pdb+".pdb", '{}/individual_list.txt'.format(workdir), workdir, workdir, workdir)
     os.system(comm)
     os.system('mv {}/{}_1.pdb   {}/wildtype.pdb '.format(workdir, pdb, workdir))
 
     # build the mutant file
-    with open('individual_list.txt','w') as f:
+    with open('{}/individual_list.txt'.format(workdir),'w') as f:
         cont = ''
         separator = list(','*(len(wildname)-1)+';')
         for i in range(len(wildname)):
@@ -478,7 +481,7 @@ def predict_ddg(pdbfile, mutationinfo, if_info):
                                         separator[i])
         f.write(cont)
     comm = './foldx --command=BuildModel --pdb={} --mutant-file={} --output-dir={} --pdb-dir={} > {}/foldx.log'.format(\
-                                pdbfile, 'individual_list.txt', workdir, './',workdir)
+                                pdb+".pdb", '{}/individual_list.txt'.format(workdir), workdir, workdir, workdir)
     os.system(comm)
 
     wildtypefile = '{}/wildtype.pdb'.format(workdir, pdb)
@@ -486,7 +489,7 @@ def predict_ddg(pdbfile, mutationinfo, if_info):
     
     # --- gen_graph_data ---
     try:
-        A, E, _ = gen_graph_data(wildtypefile, graph_mutinfo, interfacefile , cutoff, if_info)
+        A, E, _ = gen_graph_data(wildtypefile, graph_mutinfo, interfacefile, cutoff, if_info)
         A_m, E_m, _ = gen_graph_data(mutantfile, graph_mutinfo, interfacefile , cutoff, if_info)
     except:
         print('Data processing error: Please double check your inputs is correct! Such as the pdb file path, mutation information and binding partners. You might find more error details at {}/foldx.log'.format(workdir))
@@ -526,11 +529,14 @@ def predict_ddg(pdbfile, mutationinfo, if_info):
         #print('The predicted binding affinity change (wildtype-mutant) is 0.0 kcal/mol.')
         None
 
-    os.system('rm ./{}'.format(pdbfile))
-    os.system('rm ./individual_list.txt')
+    #os.system('rm ./{}'.format(pdbfile))
+    #os.system('rm ./individual_list.txt')
     
     return ddg
 
+
+def predict_ddg_wrapper(name, args):
+    return name, predict_ddg(*args)
 
 if __name__ == "__main__":
     main()
