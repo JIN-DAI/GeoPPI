@@ -32,8 +32,8 @@ def gen_interface_func(pdbobject, interface_info, workdir):
 				resid = linee[0]
 				chainn = mapp[linee[1]]
 				inter='{}_{}_{}_{}'.format(cha, chb, chainn, resid)
-			if inter not in interfaces:
-				interfaces.append(inter)
+				if inter not in interfaces:
+					interfaces.append(inter)
 			ffile.close()
 			os.remove('{}/temp.txt'.format(workdir))
 
