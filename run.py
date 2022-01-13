@@ -396,7 +396,7 @@ def main():
 
 
 # ----------------------------------------------------------------
-def predict_ddg(pdbfile, mutationinfo, if_info, workdir_suffix=""):
+def predict_ddg(pdbfile, mutationinfo, if_info, workdir_suffix="", remove_temp=True):
     gnnfile = 'trainedmodels/GeoEnc.tor'
     gbtfile = 'trainedmodels/gbt-s4169.pkl'
     idxfile = 'trainedmodels/sortidx.npy'
@@ -531,10 +531,13 @@ def predict_ddg(pdbfile, mutationinfo, if_info, workdir_suffix=""):
 
     #os.system('rm ./{}'.format(pdbfile))
     #os.system('rm ./individual_list.txt')
+    if remove_temp:
+        shutil.rmtree(workdir)
     
     return ddg
 
 
+# wrapper for multiprocessing.apply_async
 def predict_ddg_wrapper(name, args):
     return name, predict_ddg(*args)
 
