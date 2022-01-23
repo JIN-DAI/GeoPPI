@@ -1,3 +1,4 @@
+import random
 
 
 # --- Helper Functions ---
@@ -91,4 +92,47 @@ def inject_mutation_sites(mut_sub_seq, seq, mut_profile_dict, seq_start_idx):
         seq_new[key-seq_start_idx] = mut_sub_seq[idx] 
     return "".join(seq_new)
 
+
+# --- GA Functions ---
+#  Selection Function
+def selection_pair(seq_pool, fitness_func):
+    return random.choices(seq_pool, weights=[fitness_func(seq) for seq in seq_pool], k=2)
+
+
+# Crossover at Single Point
+def single_point_crossover(seq_a, seq_b):
+    if len(seq_a) != len(seq_a):
+        raise ValueError("Sequence a and b must be of same length")
+    
+    length = len(seq_a)
+    if len(seq_a) < 2:
+        return seq_a, seq_b
+    
+    p = random.randint(1, length-1)
+    return seq_a[:p]+seq_b[p:], seq_b[:p]+seq_a[p:]
+
+
+# Point Mutation Function
+def mutation(seq, mut_profile_dict, num=1, whole_chain=True):
+    if not whole_chain and len(seq) != len(mut_profile_dict):
+        raise ValueError("seq and mut_profile_dict must be of same length")
+    
+    seq = list(seq)
+    
+    # dealing with a.a. index difference in seq and mut_profile_dict
+    if whole_chain:
+        # (index in in the whole sequence, index in the whole sequence)
+        idx_tuple = tuple(zip([i-1 for i in mut_profile_dict.keys()], list(mut_profile_dict.keys())))
+    else:
+        # (index in the sub sequence of mutation region, index in the whole sequence)
+        idx_tuple = tuple(zip([i for i in range(len(mut_profile_dict))], list(mut_profile_dict.keys())))
+    
+    # select indice to mutate
+    idx_to_mut = random.sample(idx_tuple, k=num)
+    
+    # mutate each index
+    for idx in idx_to_mut:
+        seq[idx[0]] = random.choices(mut_profile_dict[idx[1]][0], weights=mut_profile_dict[idx[1]][1])[0]
+    
+    return "".join(seq)
 
