@@ -1,6 +1,9 @@
 import random
 
 
+# --- GLOABEL ---
+AALETTER = ['A', 'R', 'N', 'D', 'C', 'Q', 'E', 'G', 'H', 'I', 'L', 'K', 'M', 'F', 'P', 'S', 'T', 'W', 'Y', 'V']
+
 # --- Helper Functions ---
 
 # Read FASTA Files
@@ -38,6 +41,30 @@ def compare_seq(seq_a, seq_b):
     if len(seq_a) != len(seq_b):
         raise ValueError("Sequence a and b must be of the same length")
     return "".join(["-" if a == b else "+" for a, b in zip(seq_a, seq_b)])
+
+
+# read mut_profile
+def read_mut_profile(mut_profile, verbose=True):
+    mut_profile_dict = {}
+    
+    with open(mut_profile, 'r') as f:
+        for line in f:
+            linestr = line.strip().split()
+            if linestr[0] == 'PROB':
+                mut_prob = [float(l) for l in linestr[1:]]  # mutation probability
+            if linestr[0] == 'RES':
+                mut_aa_list = "".join(linestr[3:])
+                mut_prob_list = [mut_prob[idx]/len(linestr[3+idx]) for idx, l in enumerate(linestr[3:]) for _ in l]
+                mut_profile_dict[int(linestr[1])] = (mut_aa_list, mut_prob_list, linestr[2])
+    
+    if verbose:
+        print("Single point mutation scheme:")
+        print("   {:3s} {:3s} {:20s} [{:}]".format("Idx", "Src", "Tgt", "Prob"))
+        for key, value in mut_profile_dict.items():
+            print("   {:3d}  {:1s}  {:20s} [{:}]"
+                  .format(key, value[2], value[0], " ".join(map(lambda s: "%.2f"%s, value[1]))))
+    
+    return mut_profile_dict
 
 
 # List of Strings to Specify Mutation
